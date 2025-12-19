@@ -16,12 +16,19 @@ app = FastAPI(title="Mergington High School API",
 
 # Mount the static files directory
 current_dir = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
-          "static")), name="static")
+app.mount("/static", StaticFiles(directory=str(current_dir / "static")), name="static")
 
 # In-memory activity database
 activities = {
+    "Art Club": {
+        "instructor": "Ms. Smith",
+        "description": "Explore various art techniques and create your own masterpieces",
+        "schedule": "Wednesdays, 4:00 PM - 6:00 PM",
+        "max_participants": 15,
+        "participants": []
+    },
     "Chess Club": {
+        "instructor": "Mr. Anderson",
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
         "max_participants": 12,
@@ -62,6 +69,42 @@ def signup_for_activity(activity_name: str, email: str):
     # Get the specific activity
     activity = activities[activity_name]
 
+    # Ensure participants key exists and is a list
+    participants = activity.get("participants")
+    if participants is None:
+        participants = []
+        activity["participants"] = participants
+    elif not isinstance(participants, list):
+        raise HTTPException(status_code=500, detail="Invalid participants data")
+
+    # Prevent duplicate signups
+    if email in participants:
+        raise HTTPException(status_code=400, detail="Student already signed up")
+
+    # Enforce max participants if configured
+    max_p = activity.get("max_participants")
+    if isinstance(max_p, int) and len(participants) >= max_p:
+        raise HTTPException(status_code=400, detail="Activity is full")
+
     # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+    participants.append(email)
+    return {"message": f"Signed up {email} for {activity_name}", "participants_count": len(participants)}
+
+
+@app.delete("/activities/{activity_name}/participants")
+def unregister_from_activity(activity_name: str, email: str):
+    """Unregister a student from an activity"""
+    # Validate activity exists
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity = activities[activity_name]
+    participants = activity.get("participants")
+    if participants is None or not isinstance(participants, list):
+        raise HTTPException(status_code=500, detail="Invalid participants data")
+
+    if email not in participants:
+        raise HTTPException(status_code=404, detail="Participant not found")
+
+    participants.remove(email)
+    return {"message": f"Unregistered {email} from {activity_name}", "participants_count": len(participants)}
