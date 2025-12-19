@@ -62,6 +62,18 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+        // Refresh the activities view so the new participant appears without reload
+        try {
+          const container = document.getElementById('activities');
+          if (container) {
+            fetch('/activities')
+              .then(r => { if (!r.ok) throw new Error('Failed to reload activities'); return r.json(); })
+              .then(data => renderActivities(container, data))
+              .catch(err => console.error('Error refreshing activities:', err));
+          }
+        } catch (err) {
+          console.error('Error scheduling activities refresh:', err);
+        }
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -94,7 +106,49 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.ok) throw new Error('无法获取活动列表');
       return res.json();
     })
-    .then(data => renderActivities(container, data))
+    .then(data => {
+      renderActivities(container, data);
+
+      // Attach click delegation once to the container for remove buttons
+      if (!container.__removeListenerAdded) {
+        container.addEventListener('click', async (e) => {
+          const btn = e.target.closest('.remove-participant');
+          if (!btn) return;
+
+          const email = btn.dataset.email;
+          const activity = btn.dataset.activity;
+
+          try {
+            const res = await fetch(`/activities/${encodeURIComponent(activity)}/participants?email=${encodeURIComponent(email)}`, {
+              method: 'DELETE'
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              alert(err.detail || 'Failed to remove participant');
+              return;
+            }
+
+            // Remove the list item from the DOM
+            const li = btn.closest('li');
+            if (li) li.remove();
+
+            // If the list is empty, replace it with an empty message
+            const ul = btn.closest('ul');
+            if (ul && ul.querySelectorAll('li').length === 0) {
+              const empty = document.createElement('div');
+              empty.className = 'empty';
+              empty.textContent = 'No participants yet';
+              ul.replaceWith(empty);
+            }
+          } catch (err) {
+            console.error(err);
+            alert('Failed to remove participant');
+          }
+        });
+        container.__removeListenerAdded = true;
+      }
+    })
     .catch(err => {
       container.innerHTML = `<div class="card"><p class="empty">加载活动失败：${escapeHtml(err.message)}</p></div>`;
     });
@@ -146,9 +200,24 @@ function renderActivities(container, activities) {
       partWrap.appendChild(empty);
     } else {
       const ul = document.createElement('ul');
+      // Create list items with a remove button for each participant
       participants.forEach(p => {
         const li = document.createElement('li');
-        li.textContent = p;
+
+        const span = document.createElement('span');
+        span.className = 'p-email';
+        span.textContent = p;
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'remove-btn remove-participant';
+        btn.dataset.email = p;
+        btn.dataset.activity = name;
+        btn.setAttribute('aria-label', `Unregister ${p}`);
+        btn.textContent = '✖';
+
+        li.appendChild(span);
+        li.appendChild(btn);
         ul.appendChild(li);
       });
       partWrap.appendChild(ul);
@@ -157,6 +226,8 @@ function renderActivities(container, activities) {
     card.appendChild(partWrap);
     container.appendChild(card);
   });
+
+  // Note: click delegation is attached once on DOMContentLoaded (see loader below)
 }
 
 function escapeHtml(s = '') {
