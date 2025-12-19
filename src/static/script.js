@@ -13,12 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function renderActivities(container, activities) {
-  container.innerHTML = ''; // 清空
+  container.innerHTML = '';
   Object.entries(activities).forEach(([name, info]) => {
     const card = document.createElement('article');
     card.className = 'card';
 
-    // 标题与元信息
     const title = document.createElement('h3');
     title.textContent = name;
     card.appendChild(title);
@@ -44,7 +43,7 @@ function renderActivities(container, activities) {
       card.appendChild(desc);
     }
 
-    // Participants 区块
+    // Participants block
     const partWrap = document.createElement('div');
     partWrap.className = 'participants';
     const ph = document.createElement('h4');
